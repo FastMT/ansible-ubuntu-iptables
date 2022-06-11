@@ -1,0 +1,7 @@
+iptables_persistent: yes
+
+# Enable full access from these interfaces
+iptables_allowed_interfaces: []
+
+# Configure outgoint NAT for below subnets
+iptables_outgoing_nat_subnets: []

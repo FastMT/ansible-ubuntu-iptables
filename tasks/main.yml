@@ -1,0 +1,156 @@
+#####################################################################################
+# Global
+#
+
+- name: Gathering facts if it was not done before
+  setup:
+  when: ansible_facts['os_family'] is not defined
+
+#########################################################
+# Install iptables and remove unnecessary extensions
+#########################################################
+
+- name: Install iptables and related services
+  apt: 
+    pkg: 
+      - iptables
+      - iptables-persistent
+    state: latest
+  become: yes
+
+- name: Delete firewalld and ufw
+  apt: 
+    pkg: 
+      - firewalld
+      - ufw
+    state: absent
+  become: yes
+  register: iptables_clean
+
+- name: reboot server after firewalld or ufw was deleted
+  reboot:
+  become: yes
+  when: iptables_clean.changed
+
+#########################################################
+# Configure rules
+#########################################################
+
+- name: Check if iptables.rules exists
+  stat:
+    path: /etc/iptables/rules.v4
+  register: r
+
+- name: Save rules to iptables.rules 
+  shell: |
+    iptables-save | grep -v 'TEMP ' | grep -v 'LIBVIRT_' \
+    | grep -v -i 'docker' | grep -v 'A FORWARD ' \
+    | grep -v 'ufw-' >/etc/iptables/rules.v4
+  become: yes
+  check_mode: no
+  when: >
+    r.stat.exists == false and
+    iptables_persistent == true
+
+- name: Allow loopback
+  iptables:
+    chain: INPUT
+    in_interface: "lo"
+    jump: ACCEPT
+    comment: Allow loopback
+  become: yes
+  register: iptables_change1
+
+- name: Allow other interfaces
+  iptables:
+    chain: INPUT
+    in_interface: "{{ item }}"
+    jump: ACCEPT
+    comment: "Allow {{ item }}"
+  become: yes
+  with_items: "{{ iptables_allowed_interfaces }}"
+  register: iptables_change2
+
+- name: Allow related and established connections
+  iptables:
+    chain: INPUT
+    ctstate: ESTABLISHED,RELATED
+    jump: ACCEPT
+    comment: Allow established
+  become: yes
+  register: iptables_change3
+
+- name: Allow new incoming SYN packets on TCP SSH (port 22 or ansible_port)
+  iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_port: "{{ ansible_port | default('22') }}"
+    ctstate: NEW
+    syn: match
+    jump: ACCEPT
+    comment: Allow SSH
+  become: yes
+  register: iptables_change4
+
+- name: Allow ICMP
+  iptables:
+    chain: INPUT
+    protocol: icmp
+    jump: ACCEPT
+    comment: Allow ICMP
+  become: yes
+  register: iptables_change5
+
+- name: Set the policy for the INPUT chain to DROP
+  iptables:
+    chain: INPUT
+    policy: DROP
+  become: yes
+  register: iptables_change6
+
+- name: Set the policy for the FORWARD chain to ACCEPT
+  iptables:
+    chain: FORWARD
+    policy: ACCEPT
+  become: yes
+  register: iptables_change7
+
+#########################################################
+# Outgoing NAT
+#########################################################
+
+- name: Enable outgoint nat
+  iptables:
+    table: nat
+    chain: POSTROUTING
+    source: "{{ item }}"
+    out_interface: "{{ ansible_default_ipv4.interface }}"
+    jump: MASQUERADE
+    comment: "Outgoing NAT for {{ item }}"
+  become: yes
+  with_items: "{{ iptables_outgoing_nat_subnets }}"
+  register: iptables_change8
+
+#########################################################
+# Save rules
+#########################################################
+
+- name: Save firewall changes to iptables.rules 
+  shell: |
+    iptables-save | grep -v 'TEMP ' | grep -v 'LIBVIRT_' \
+    | grep -v -i 'docker' | grep -v 'A FORWARD ' \
+    | grep -v 'ufw-' >/etc/iptables/rules.v4
+  become: yes
+  check_mode: no
+  when: >
+    iptables_persistent and (
+    iptables_change1.changed or
+    iptables_change2.changed or
+    iptables_change3.changed or
+    iptables_change4.changed or
+    iptables_change5.changed or
+    iptables_change6.changed or
+    iptables_change7.changed or
+    iptables_change8.changed )
+    
+
