@@ -9,13 +9,13 @@ Create requirements.yml file
 # Include ansible-ubuntu-iptables role
 - src: https://github.com/FastMT/ansible-ubuntu-iptables.git
   name: ubuntu-iptables
-  version: "v1.0.0"
+  version: "v1.0.1"
 ```
 
 Install external module into ~/.ansible/roles folder
 
 ```
-ansible-galaxy install -r requirements.yml --force
+ansible-galaxy install -r requirements.yml
 ```
 
 ## Usage
