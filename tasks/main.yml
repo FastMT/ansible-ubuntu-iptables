@@ -84,7 +84,7 @@
   iptables:
     chain: INPUT
     protocol: tcp
-    destination_port: "{{ ansible_port | default('22') }}"
+    destination_port: "{{ linux_ssh_port | default('22') }}"
     ctstate: NEW
     syn: match
     jump: ACCEPT
