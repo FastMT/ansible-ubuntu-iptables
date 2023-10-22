@@ -80,11 +80,11 @@
   become: yes
   register: iptables_change3
 
-- name: Allow new incoming SYN packets on TCP SSH (port 22 or ansible_port)
+- name: Allow new incoming SYN packets on TCP SSH (port 22 or linux_ssh_port or ansible_port)
   iptables:
     chain: INPUT
     protocol: tcp
-    destination_port: "{{ linux_ssh_port | default('22') }}"
+    destination_port: "{{ linux_ssh_port | default (ansible_port | default('22')) }}"
     ctstate: NEW
     syn: match
     jump: ACCEPT
